@@ -46,6 +46,14 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-in-prod")
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB hard limit
 
+# ─── Startup diagnostics ──────────────────────────────────────────────────────
+logger.info("=== SavvySipping startup ===")
+logger.info(f"ANTHROPIC_API_KEY set: {bool(os.environ.get('ANTHROPIC_API_KEY'))}")
+logger.info(f"ADOBE_CLIENT_ID set:   {bool(os.environ.get('ADOBE_CLIENT_ID'))}")
+logger.info(f"ADOBE_CLIENT_SECRET set: {bool(os.environ.get('ADOBE_CLIENT_SECRET'))}")
+logger.info(f"FLASK_SECRET_KEY set:  {bool(os.environ.get('FLASK_SECRET_KEY'))}")
+logger.info(f"PORT: {os.environ.get('PORT', '(not set, using 5001)')}")
+
 # ─── Config ───────────────────────────────────────────────────────────────────
 UPLOAD_FOLDER    = Path("uploads")
 GENERATED_FOLDER = Path("generated")
