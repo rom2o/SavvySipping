@@ -1,0 +1,285 @@
+/* ══════════════════════════════════════════════════════════════
+   Wine Training Generator — UI Styles
+   Palette: Burgundy #722F37 · Gold #C5A028 · Cream #FFF9F0
+   ══════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --burgundy: #722F37;
+  --burgundy-dark: #5a2229;
+  --gold:     #C5A028;
+  --cream:    #FFF9F0;
+  --dark:     #1A1A1A;
+  --mid:      #555;
+  --light:    #f4f4f4;
+  --border:   #ddd;
+  --radius:   10px;
+  --shadow:   0 4px 24px rgba(0,0,0,0.10);
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: var(--cream);
+  color: var(--dark);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ──────────────────────────────────────────────────── */
+header {
+  background: var(--burgundy);
+  color: white;
+  text-align: center;
+  padding: 2.5rem 1rem 2rem;
+}
+header .logo { font-size: 2.8rem; margin-bottom: .4rem; }
+header h1    { font-size: 1.9rem; font-weight: 700; letter-spacing: -.02em; }
+header .tagline {
+  margin-top: .5rem;
+  font-size: .95rem;
+  opacity: .82;
+  max-width: 440px;
+  margin-inline: auto;
+}
+
+/* ── Main ────────────────────────────────────────────────────── */
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem 3rem;
+}
+
+.card {
+  background: white;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 2.2rem 2.4rem;
+  width: 100%;
+  max-width: 560px;
+}
+
+/* ── Alert ───────────────────────────────────────────────────── */
+.alert {
+  padding: .85rem 1.1rem;
+  border-radius: var(--radius);
+  margin-bottom: 1.4rem;
+  font-size: .9rem;
+}
+.alert-error {
+  background: #fff0f0;
+  border-left: 4px solid #c0392b;
+  color: #7b0000;
+}
+
+/* ── Form fields ─────────────────────────────────────────────── */
+.field {
+  margin-bottom: 1.3rem;
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+}
+
+label {
+  font-weight: 600;
+  font-size: .875rem;
+  color: var(--dark);
+}
+.required { color: var(--burgundy); }
+
+input[type="text"],
+select,
+textarea {
+  border: 1.5px solid var(--border);
+  border-radius: 7px;
+  padding: .65rem .85rem;
+  font-size: .95rem;
+  font-family: inherit;
+  color: var(--dark);
+  transition: border-color .18s, box-shadow .18s;
+  outline: none;
+}
+input[type="text"]:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--burgundy);
+  box-shadow: 0 0 0 3px rgba(114,47,55,.12);
+}
+textarea { resize: vertical; }
+
+.hint {
+  font-size: .78rem;
+  color: var(--mid);
+}
+
+/* ── File drop ───────────────────────────────────────────────── */
+.file-drop {
+  position: relative;
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  padding: 1.3rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .18s, background .18s;
+}
+.file-drop:hover,
+.file-drop.drag-over {
+  border-color: var(--burgundy);
+  background: #fdf5f6;
+}
+.file-drop.has-file {
+  border-color: var(--gold);
+  background: #fffbef;
+}
+.file-drop input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+.file-drop-label {
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .6rem;
+  font-size: .9rem;
+  color: var(--mid);
+}
+.file-icon { font-size: 1.4rem; }
+
+/* ── Deliverables block ──────────────────────────────────────── */
+.deliverables {
+  background: var(--cream);
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  margin-bottom: 1.5rem;
+}
+.deliverables-title {
+  font-weight: 600;
+  font-size: .85rem;
+  color: var(--mid);
+  margin-bottom: .6rem;
+}
+.deliverables-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .4rem;
+}
+.deliverable {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: .5rem .75rem;
+  font-size: .85rem;
+  font-weight: 500;
+}
+
+/* ── Submit button ───────────────────────────────────────────── */
+.btn-primary {
+  width: 100%;
+  background: var(--burgundy);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: .9rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .18s, transform .1s;
+  letter-spacing: .01em;
+}
+.btn-primary:hover  { background: var(--burgundy-dark); }
+.btn-primary:active { transform: scale(.98); }
+.btn-primary:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+/* ── Loader overlay ──────────────────────────────────────────── */
+.loader-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(26,26,26,.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+.loader-box {
+  background: white;
+  border-radius: 14px;
+  padding: 2.4rem 2.8rem;
+  text-align: center;
+  max-width: 380px;
+  width: 90%;
+  box-shadow: 0 8px 40px rgba(0,0,0,.25);
+}
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--cream);
+  border-top-color: var(--burgundy);
+  border-radius: 50%;
+  animation: spin .9s linear infinite;
+  margin: 0 auto 1.2rem;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loader-title {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--dark);
+  margin-bottom: .4rem;
+}
+.loader-sub {
+  font-size: .88rem;
+  color: var(--mid);
+  margin-bottom: 1.1rem;
+  min-height: 1.3em;
+}
+.loader-steps {
+  display: flex;
+  justify-content: center;
+  gap: .6rem;
+  margin-bottom: .9rem;
+  flex-wrap: wrap;
+}
+.step {
+  font-size: .75rem;
+  padding: .25rem .6rem;
+  border-radius: 20px;
+  background: var(--light);
+  color: var(--mid);
+  font-weight: 500;
+  transition: background .3s, color .3s;
+}
+.step.active {
+  background: var(--burgundy);
+  color: white;
+}
+.loader-note {
+  font-size: .75rem;
+  color: #aaa;
+}
+
+/* ── Footer ──────────────────────────────────────────────────── */
+footer {
+  text-align: center;
+  padding: 1.2rem;
+  font-size: .78rem;
+  color: var(--mid);
+  border-top: 1px solid var(--border);
+}
+
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 500px) {
+  .card { padding: 1.5rem 1.2rem; }
+  header h1 { font-size: 1.5rem; }
+  .deliverables-grid { grid-template-columns: 1fr; }
+}

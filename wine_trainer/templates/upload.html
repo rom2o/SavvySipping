@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wine Training Generator</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────── -->
+  <header>
+    <div class="logo">🍷</div>
+    <h1>Wine Training Generator</h1>
+    <p class="tagline">Upload your wine list. Get a complete staff training pack in minutes.</p>
+  </header>
+
+  <!-- ── Main Card ──────────────────────────────────────────── -->
+  <main>
+    <div class="card">
+
+      {% if error %}
+      <div class="alert alert-error">
+        <strong>⚠ Error:</strong> {{ error }}
+      </div>
+      {% endif %}
+
+      <form
+        id="uploadForm"
+        action="/process"
+        method="POST"
+        enctype="multipart/form-data"
+        onsubmit="showLoader()"
+      >
+
+        <!-- Restaurant Name -->
+        <div class="field">
+          <label for="restaurant_name">Restaurant Name <span class="required">*</span></label>
+          <input
+            type="text"
+            id="restaurant_name"
+            name="restaurant_name"
+            placeholder="e.g. Le Bernardin"
+            required
+            autocomplete="off"
+          />
+        </div>
+
+        <!-- Cuisine Style -->
+        <div class="field">
+          <label for="cuisine_style">Cuisine Style <span class="required">*</span></label>
+          <select id="cuisine_style" name="cuisine_style" required>
+            <option value="" disabled selected>— Select cuisine type —</option>
+            <option value="French Fine Dining">French Fine Dining</option>
+            <option value="Contemporary European">Contemporary European</option>
+            <option value="Italian">Italian</option>
+            <option value="Japanese / Omakase">Japanese / Omakase</option>
+            <option value="Steakhouse">Steakhouse</option>
+            <option value="Mediterranean">Mediterranean</option>
+            <option value="Asian Fusion">Asian Fusion</option>
+            <option value="Seafood">Seafood</option>
+            <option value="Modern American">Modern American</option>
+            <option value="Bistro / Brasserie">Bistro / Brasserie</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+
+        <!-- Staff Description -->
+        <div class="field">
+          <label for="staff_description">Staff Profile</label>
+          <textarea
+            id="staff_description"
+            name="staff_description"
+            rows="3"
+            placeholder="e.g. Mostly young international staff, limited wine knowledge, fast-paced environment"
+          ></textarea>
+          <span class="hint">Help Claude tailor the training tone and depth.</span>
+        </div>
+
+        <!-- PDF Upload -->
+        <div class="field">
+          <label for="wine_list">Wine List PDF <span class="required">*</span></label>
+          <div class="file-drop" id="fileDrop">
+            <input
+              type="file"
+              id="wine_list"
+              name="wine_list"
+              accept=".pdf"
+              required
+              onchange="onFileSelected(this)"
+            />
+            <div class="file-drop-label" id="fileLabel">
+              <span class="file-icon">📄</span>
+              <span id="fileText">Drop PDF here or <u>browse</u></span>
+            </div>
+          </div>
+          <span class="hint">Max 50 MB · PDF only</span>
+        </div>
+
+        <!-- What you get -->
+        <div class="deliverables">
+          <p class="deliverables-title">You'll receive 4 documents:</p>
+          <div class="deliverables-grid">
+            <div class="deliverable">📘 Training Guide</div>
+            <div class="deliverable">📝 Knowledge Test</div>
+            <div class="deliverable">📋 Cheat Sheet</div>
+            <div class="deliverable">🔑 Answer Key</div>
+          </div>
+        </div>
+
+        <!-- Submit -->
+        <button type="submit" class="btn-primary" id="submitBtn">
+          Generate Training Pack
+        </button>
+
+      </form>
+    </div>
+
+    <!-- ── Loader overlay ──────────────────────────────────── -->
+    <div id="loader" class="loader-overlay" style="display:none;">
+      <div class="loader-box">
+        <div class="spinner"></div>
+        <p class="loader-title">Generating your training pack…</p>
+        <p class="loader-sub" id="loaderStep">Extracting wine list from PDF</p>
+        <div class="loader-steps">
+          <span class="step active" id="step1">① Extract PDF</span>
+          <span class="step" id="step2">② Analyse wines</span>
+          <span class="step" id="step3">③ Build documents</span>
+        </div>
+        <p class="loader-note">This usually takes 60–90 seconds.</p>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ── Footer ─────────────────────────────────────────────── -->
+  <footer>
+    <p>Powered by Adobe PDF Services &amp; Claude AI&nbsp;&nbsp;·&nbsp;&nbsp;© 2024</p>
+  </footer>
+
+  <script>
+    // ── File drop zone ──────────────────────────────────────────────────
+    function onFileSelected(input) {
+      const label = document.getElementById("fileText");
+      if (input.files && input.files[0]) {
+        label.textContent = "✅ " + input.files[0].name;
+        document.getElementById("fileDrop").classList.add("has-file");
+      }
+    }
+
+    const drop = document.getElementById("fileDrop");
+    drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("drag-over"); });
+    drop.addEventListener("dragleave", ()  => drop.classList.remove("drag-over"));
+    drop.addEventListener("drop", e => {
+      e.preventDefault();
+      drop.classList.remove("drag-over");
+      const input = document.getElementById("wine_list");
+      input.files = e.dataTransfer.files;
+      onFileSelected(input);
+    });
+
+    // ── Loader + step animation ─────────────────────────────────────────
+    function showLoader() {
+      document.getElementById("loader").style.display = "flex";
+      document.getElementById("submitBtn").disabled = true;
+
+      const steps = [
+        { id: "step1", text: "Extracting wine list from PDF…",   delay: 0    },
+        { id: "step2", text: "Claude is analysing your wines…",   delay: 20000 },
+        { id: "step3", text: "Building your 4 documents…",        delay: 50000 },
+      ];
+
+      steps.forEach(s => {
+        setTimeout(() => {
+          document.querySelectorAll(".step").forEach(el => el.classList.remove("active"));
+          document.getElementById(s.id).classList.add("active");
+          document.getElementById("loaderStep").textContent = s.text;
+        }, s.delay);
+      });
+    }
+  </script>
+
+</body>
+</html>
