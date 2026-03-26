@@ -42,7 +42,7 @@ def extract_wine_list(pdf_path: str, credentials_path: str) -> str:
         raw_json = os.environ.get("ADOBE_CREDENTIALS_JSON")
         if raw_json:
             try:
-                creds = json.loads(raw_json)
+                creds = _load_credentials_from_dict(json.loads(raw_json))
                 client_id     = creds.get("client_id") or creds.get("CLIENT_ID")
                 client_secret = creds.get("client_secret") or creds.get("CLIENT_SECRET")
             except json.JSONDecodeError as e:
@@ -97,22 +97,21 @@ def extract_wine_list(pdf_path: str, credentials_path: str) -> str:
 # Private helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _load_credentials_from_dict(data: dict) -> dict:
+    """Resolve nested or flat credentials dict."""
+    if "client_id" in data or "CLIENT_ID" in data:
+        return data
+    for key in ("client_credentials", "credentials", "oauth"):
+        if key in data and isinstance(data[key], dict):
+            return data[key]
+    return data
+
+
 def _load_credentials(path: str) -> dict:
     """Load credentials JSON — handles nested or flat formats."""
     with open(path, "r") as f:
         data = json.load(f)
-
-    # Flat format: {"client_id": "...", "client_secret": "..."}
-    if "client_id" in data or "CLIENT_ID" in data:
-        return data
-
-    # Nested format: {"client_credentials": {"client_id": ...}}
-    for key in ("client_credentials", "credentials", "oauth"):
-        if key in data and isinstance(data[key], dict):
-            return data[key]
-
-    # Return as-is and let the caller handle missing keys
-    return data
+    return _load_credentials_from_dict(data)
 
 
 def _get_access_token(client_id: str, client_secret: str) -> str:
