@@ -44,6 +44,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-in-prod")
+app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB hard limit
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 UPLOAD_FOLDER    = Path("uploads")
