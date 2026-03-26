@@ -5,29 +5,25 @@ Flask web application for the Wine Training Generator.
 
 Routes:
   GET  /            → Upload form
-  POST /process     → Run pipeline, return ZIP of 4 PDFs
+  POST /process     → Start background pipeline, return confirmation page
   GET  /health      → Simple health check
 
-Run locally:
-  python app.py
-
 Deploy to production (Gunicorn):
-  gunicorn app:app --workers 2 --timeout 300
+  gunicorn app:app --workers 1 --timeout 1020
 """
 
 import os
+import re
 import uuid
+import base64
 import shutil
 import logging
 import zipfile
-import tempfile
+import threading
 from pathlib import Path
 from datetime import datetime
 
-from flask import (
-    Flask, request, render_template,
-    send_file, jsonify, redirect, url_for, flash
-)
+from flask import Flask, request, render_template, jsonify
 from dotenv import load_dotenv
 
 from pipeline.adobe_extractor import extract_wine_list
@@ -46,22 +42,162 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-change-in-prod")
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB hard limit
 
-# ─── Startup diagnostics ──────────────────────────────────────────────────────
+# ─── Startup diagnostics ─────────────────────────────────────────────────────
 logger.info("=== SavvySipping startup ===")
-logger.info(f"ANTHROPIC_API_KEY set: {bool(os.environ.get('ANTHROPIC_API_KEY'))}")
-logger.info(f"ADOBE_CLIENT_ID set:   {bool(os.environ.get('ADOBE_CLIENT_ID'))}")
+logger.info(f"ANTHROPIC_API_KEY set:   {bool(os.environ.get('ANTHROPIC_API_KEY'))}")
+logger.info(f"ADOBE_CLIENT_ID set:     {bool(os.environ.get('ADOBE_CLIENT_ID'))}")
 logger.info(f"ADOBE_CLIENT_SECRET set: {bool(os.environ.get('ADOBE_CLIENT_SECRET'))}")
-logger.info(f"FLASK_SECRET_KEY set:  {bool(os.environ.get('FLASK_SECRET_KEY'))}")
+logger.info(f"SENDGRID_API_KEY set:    {bool(os.environ.get('SENDGRID_API_KEY'))}")
+logger.info(f"FROM_EMAIL:              {os.environ.get('FROM_EMAIL', '(not set)')}")
 logger.info(f"PORT: {os.environ.get('PORT', '(not set, using 5001)')}")
 
-# ─── Config ───────────────────────────────────────────────────────────────────
+# ─── Config ──────────────────────────────────────────────────────────────────
 UPLOAD_FOLDER    = Path("uploads")
 GENERATED_FOLDER = Path("generated")
 ALLOWED_EXT      = {"pdf"}
-MAX_FILE_MB      = 50
 
 UPLOAD_FOLDER.mkdir(exist_ok=True)
 GENERATED_FOLDER.mkdir(exist_ok=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Background pipeline
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _run_pipeline(job_id, pdf_path, job_dir, restaurant_name,
+                  cuisine_style, staff_description, to_email):
+    """Run the full pipeline in a background thread and email the result."""
+    zip_path = None
+    try:
+        credentials_path = os.environ.get(
+            "ADOBE_CREDENTIALS_PATH", "pdfservices-api-credentials.json"
+        )
+
+        logger.info(f"[{job_id}] Step 1/3 – Adobe PDF extraction...")
+        wine_list_text = extract_wine_list(str(pdf_path), credentials_path)
+        logger.info(f"[{job_id}] Extracted {len(wine_list_text):,} characters.")
+
+        logger.info(f"[{job_id}] Step 2/3 – Claude analysis...")
+        content = analyze_wine_list(
+            wine_list_text    = wine_list_text,
+            restaurant_name   = restaurant_name,
+            cuisine_style     = cuisine_style or "Contemporary",
+            staff_description = staff_description or "Mixed experience levels",
+        )
+
+        logger.info(f"[{job_id}] Step 3/3 – Generating PDFs...")
+        pdf_paths = generate_all_pdfs(
+            content         = content,
+            restaurant_name = restaurant_name,
+            output_dir      = str(job_dir),
+        )
+
+        zip_path = GENERATED_FOLDER / f"{job_id}_training_pack.zip"
+        with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
+            for _, path in pdf_paths.items():
+                zf.write(path, arcname=Path(path).name)
+
+        logger.info(f"[{job_id}] ZIP ready — sending email to {to_email}...")
+        _send_email(to_email, restaurant_name, zip_path)
+        logger.info(f"[{job_id}] Email sent. Done.")
+
+    except Exception as e:
+        logger.exception(f"[{job_id}] Pipeline failed: {e}")
+        _send_failure_email(to_email, restaurant_name)
+
+    finally:
+        if Path(pdf_path).exists():
+            Path(pdf_path).unlink()
+        if job_dir.exists():
+            shutil.rmtree(str(job_dir), ignore_errors=True)
+        if zip_path and Path(zip_path).exists():
+            Path(zip_path).unlink()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Email helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _send_email(to_email, restaurant_name, zip_path):
+    import sendgrid
+    from sendgrid.helpers.mail import (
+        Mail, Attachment, FileContent, FileName, FileType, Disposition
+    )
+
+    sg_key  = os.environ.get("SENDGRID_API_KEY")
+    from_email = os.environ.get("FROM_EMAIL", "noreply@savvysipping.com")
+
+    if not sg_key:
+        logger.error("SENDGRID_API_KEY not set — cannot send email.")
+        return
+
+    with open(zip_path, "rb") as f:
+        encoded = base64.b64encode(f.read()).decode()
+
+    safe = re.sub(r"[^\w\-]", "_", restaurant_name).strip("_")
+
+    message = Mail(
+        from_email=from_email,
+        to_emails=to_email,
+        subject=f"Your Wine Training Pack — {restaurant_name}",
+        html_content=f"""
+        <div style="font-family:sans-serif;max-width:600px;margin:auto;">
+          <h2 style="color:#722F37;">🍷 Your Wine Training Pack is Ready!</h2>
+          <p>Hi there,</p>
+          <p>Your wine training pack for <strong>{restaurant_name}</strong>
+             is attached to this email.</p>
+          <p>The ZIP contains 4 documents:</p>
+          <ul>
+            <li>📘 Training Guide</li>
+            <li>📝 Knowledge Test</li>
+            <li>📋 Cheat Sheet</li>
+            <li>🔑 Answer Key</li>
+          </ul>
+          <p style="color:#888;font-size:12px;">Powered by SavvySipping</p>
+        </div>
+        """,
+    )
+
+    attachment = Attachment(
+        FileContent(encoded),
+        FileName(f"{safe}_Wine_Training_Pack.zip"),
+        FileType("application/zip"),
+        Disposition("attachment"),
+    )
+    message.attachment = attachment
+
+    sg = sendgrid.SendGridAPIClient(api_key=sg_key)
+    sg.send(message)
+
+
+def _send_failure_email(to_email, restaurant_name):
+    try:
+        import sendgrid
+        from sendgrid.helpers.mail import Mail
+
+        sg_key     = os.environ.get("SENDGRID_API_KEY")
+        from_email = os.environ.get("FROM_EMAIL", "noreply@savvysipping.com")
+        if not sg_key:
+            return
+
+        message = Mail(
+            from_email=from_email,
+            to_emails=to_email,
+            subject=f"Issue with your Wine Training Pack — {restaurant_name}",
+            html_content=f"""
+            <div style="font-family:sans-serif;max-width:600px;margin:auto;">
+              <h2 style="color:#722F37;">Something went wrong</h2>
+              <p>We ran into an issue generating the training pack for
+                 <strong>{restaurant_name}</strong>.</p>
+              <p>Please try again or contact support.</p>
+              <p style="color:#888;font-size:12px;">Powered by SavvySipping</p>
+            </div>
+            """,
+        )
+        sg = sendgrid.SendGridAPIClient(api_key=sg_key)
+        sg.send(message)
+    except Exception:
+        pass
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -75,93 +211,45 @@ def index():
 
 @app.route("/process", methods=["POST"])
 def process():
-    """
-    Main pipeline endpoint.
-    Accepts multipart form with:
-      - wine_list       : PDF file
-      - restaurant_name : str
-      - cuisine_style   : str
-      - staff_description: str
-
-    Returns a ZIP file containing the 4 training PDFs.
-    """
-    # ── Validate form inputs ──────────────────────────────────────────────
     restaurant_name   = request.form.get("restaurant_name", "").strip()
     cuisine_style     = request.form.get("cuisine_style", "").strip()
     staff_description = request.form.get("staff_description", "").strip()
+    email             = request.form.get("email", "").strip()
     wine_pdf          = request.files.get("wine_list")
 
     if not restaurant_name:
         return _error("Please enter the restaurant name.", 400)
+    if not email or "@" not in email:
+        return _error("Please enter a valid email address.", 400)
     if not wine_pdf or wine_pdf.filename == "":
         return _error("Please upload a wine list PDF.", 400)
     if not _allowed_file(wine_pdf.filename):
         return _error("Only PDF files are accepted.", 400)
 
-    # ── Save uploaded PDF ─────────────────────────────────────────────────
-    job_id   = uuid.uuid4().hex[:10]
-    job_dir  = GENERATED_FOLDER / job_id
+    job_id  = uuid.uuid4().hex[:10]
+    job_dir = GENERATED_FOLDER / job_id
     job_dir.mkdir(parents=True)
 
     pdf_path = UPLOAD_FOLDER / f"{job_id}_wine_list.pdf"
     wine_pdf.save(str(pdf_path))
-    logger.info(f"[{job_id}] Saved PDF: {pdf_path.name}  ({pdf_path.stat().st_size // 1024} KB)")
+    logger.info(
+        f"[{job_id}] Saved PDF: {pdf_path.name}  "
+        f"({pdf_path.stat().st_size // 1024} KB) → {email}"
+    )
 
-    try:
-        # ── Step 1: Adobe PDF Extract ──────────────────────────────────────
-        logger.info(f"[{job_id}] Step 1/3 – Adobe PDF extraction...")
-        credentials_path = os.environ.get("ADOBE_CREDENTIALS_PATH", "pdfservices-api-credentials.json")
-        wine_list_text = extract_wine_list(str(pdf_path), credentials_path)
-        logger.info(f"[{job_id}] Extracted {len(wine_list_text):,} characters.")
+    thread = threading.Thread(
+        target=_run_pipeline,
+        args=(job_id, pdf_path, job_dir, restaurant_name,
+              cuisine_style, staff_description, email),
+        daemon=True,
+    )
+    thread.start()
 
-        # ── Step 2: Claude Analysis ────────────────────────────────────────
-        logger.info(f"[{job_id}] Step 2/3 – Claude analysis (3 API calls)...")
-        content = analyze_wine_list(
-            wine_list_text   = wine_list_text,
-            restaurant_name  = restaurant_name,
-            cuisine_style    = cuisine_style or "Contemporary",
-            staff_description= staff_description or "Mixed experience levels",
-        )
-
-        # ── Step 3: Generate 4 PDFs ────────────────────────────────────────
-        logger.info(f"[{job_id}] Step 3/3 – Generating PDFs...")
-        pdf_paths = generate_all_pdfs(
-            content         = content,
-            restaurant_name = restaurant_name,
-            output_dir      = str(job_dir),
-        )
-
-        # ── Bundle into ZIP ────────────────────────────────────────────────
-        zip_path = GENERATED_FOLDER / f"{job_id}_training_pack.zip"
-        with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
-            for doc_type, path in pdf_paths.items():
-                zf.write(path, arcname=Path(path).name)
-
-        logger.info(f"[{job_id}] Done. ZIP: {zip_path.name}")
-
-        # ── Return ZIP to browser ─────────────────────────────────────────
-        safe = _safe_name(restaurant_name)
-        download_name = f"{safe}_Wine_Training_Pack.zip"
-
-        return send_file(
-            str(zip_path),
-            as_attachment=True,
-            download_name=download_name,
-            mimetype="application/zip",
-        )
-
-    except Exception as e:
-        logger.exception(f"[{job_id}] Pipeline failed: {e}")
-        return _error(
-            f"Something went wrong during processing: {str(e)}\n"
-            "Please check your API credentials and try again.",
-            500,
-        )
-
-    finally:
-        # Cleanup uploaded PDF (keep generated ZIP for audit trail)
-        if pdf_path.exists():
-            pdf_path.unlink()
+    return render_template(
+        "processing.html",
+        email=email,
+        restaurant_name=restaurant_name,
+    )
 
 
 @app.route("/health")
@@ -177,13 +265,7 @@ def _allowed_file(filename: str) -> bool:
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
 
 
-def _safe_name(name: str) -> str:
-    import re
-    return re.sub(r"[^\w\-]", "_", name).strip("_")
-
-
 def _error(message: str, status: int = 400):
-    """Return JSON error for API clients, HTML for browsers."""
     if request.accept_mimetypes.accept_json:
         return jsonify({"error": message}), status
     return render_template("upload.html", error=message), status
@@ -195,5 +277,5 @@ def _error(message: str, status: int = 400):
 
 if __name__ == "__main__":
     debug = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
-    port = int(os.environ.get("PORT", 5001))
+    port  = int(os.environ.get("PORT", 5001))
     app.run(host="0.0.0.0", port=port, debug=debug)
