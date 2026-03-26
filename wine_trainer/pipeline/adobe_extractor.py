@@ -34,14 +34,19 @@ def extract_wine_list(pdf_path: str, credentials_path: str) -> str:
         Clean text string of the entire wine list.
     """
     # ── 1. Load credentials ───────────────────────────────────────────────
-    creds = _load_credentials(credentials_path)
-    client_id     = creds.get("client_id") or creds.get("CLIENT_ID")
-    client_secret = creds.get("client_secret") or creds.get("CLIENT_SECRET")
+    # Prefer environment variables (Railway / production); fall back to file.
+    client_id     = os.environ.get("ADOBE_CLIENT_ID")
+    client_secret = os.environ.get("ADOBE_CLIENT_SECRET")
+
+    if not client_id or not client_secret:
+        creds = _load_credentials(credentials_path)
+        client_id     = creds.get("client_id") or creds.get("CLIENT_ID")
+        client_secret = creds.get("client_secret") or creds.get("CLIENT_SECRET")
 
     if not client_id or not client_secret:
         raise ValueError(
-            "Could not find client_id / client_secret in credentials file. "
-            f"Keys found: {list(creds.keys())}"
+            "Adobe credentials not found. Set ADOBE_CLIENT_ID and ADOBE_CLIENT_SECRET "
+            "environment variables, or provide a valid credentials JSON file."
         )
 
     # ── 2. Get OAuth access token ─────────────────────────────────────────
