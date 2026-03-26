@@ -1,1 +1,6 @@
 .env
+pdfservices-api-credentials.json
+wine_trainer/uploads/
+PDFServicesSDK-PythonSamples/
+**/.DS_Store
+wine_trainer/generated/

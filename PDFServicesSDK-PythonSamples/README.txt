@@ -1,1 +1,0 @@
-The downloaded zip file contains your API credentials and personalized code samples. Please store your API credentials securely. You can also access a copy on the dashboard of your Adobe Developer Console.
