@@ -26,7 +26,7 @@ from pathlib import Path
 from datetime import datetime
 
 import stripe
-from flask import Flask, request, render_template, jsonify, send_file
+from flask import Flask, request, render_template, jsonify
 from dotenv import load_dotenv
 
 from pipeline.adobe_extractor import extract_wine_list
@@ -147,64 +147,22 @@ def process_with_token(token):
     pdf_path = UPLOAD_FOLDER / f"{job_id}_wine_list.pdf"
     wine_pdf.save(str(pdf_path))
     logger.info(
-        f"[{job_id}] Token job — PDF saved ({pdf_path.stat().st_size // 1024} KB)"
+        f"[{job_id}] Token job — PDF saved ({pdf_path.stat().st_size // 1024} KB) → {row['email']}"
     )
 
-    zip_path = None
-    try:
-        credentials_path = os.environ.get(
-            "ADOBE_CREDENTIALS_PATH", "pdfservices-api-credentials.json"
-        )
+    thread = threading.Thread(
+        target=_run_pipeline_and_email,
+        args=(job_id, pdf_path, job_dir, restaurant_name,
+              cuisine_style, staff_description, row["email"], token),
+        daemon=True,
+    )
+    thread.start()
 
-        logger.info(f"[{job_id}] Step 1/3 – Adobe PDF extraction...")
-        wine_list_text = extract_wine_list(str(pdf_path), credentials_path)
-        logger.info(f"[{job_id}] Extracted {len(wine_list_text):,} characters.")
-
-        logger.info(f"[{job_id}] Step 2/3 – Claude analysis...")
-        content = analyze_wine_list(
-            wine_list_text    = wine_list_text,
-            restaurant_name   = restaurant_name,
-            cuisine_style     = cuisine_style or "Contemporary",
-            staff_description = staff_description or "Mixed experience levels",
-        )
-
-        logger.info(f"[{job_id}] Step 3/3 – Generating PDFs...")
-        pdf_paths = generate_all_pdfs(
-            content         = content,
-            restaurant_name = restaurant_name,
-            output_dir      = str(job_dir),
-        )
-
-        zip_path = GENERATED_FOLDER / f"{job_id}_training_pack.zip"
-        with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zf:
-            for _, path in pdf_paths.items():
-                zf.write(path, arcname=Path(path).name)
-
-        mark_used(token)
-        logger.info(f"[{job_id}] Done — returning ZIP, token consumed.")
-
-        safe          = _safe_name(restaurant_name)
-        download_name = f"{safe}_Wine_Training_Pack.zip"
-        return send_file(
-            str(zip_path),
-            as_attachment=True,
-            download_name=download_name,
-            mimetype="application/zip",
-        )
-
-    except Exception as e:
-        logger.exception(f"[{job_id}] Pipeline failed: {e}")
-        return _error(
-            f"Something went wrong during processing: {str(e)}",
-            500,
-            token=token,
-        )
-
-    finally:
-        if pdf_path.exists():
-            pdf_path.unlink()
-        if job_dir.exists():
-            shutil.rmtree(str(job_dir), ignore_errors=True)
+    return render_template(
+        "processing.html",
+        email=row["email"],
+        restaurant_name=restaurant_name,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -270,7 +228,7 @@ def health():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _run_pipeline_and_email(job_id, pdf_path, job_dir, restaurant_name,
-                             cuisine_style, staff_description, to_email):
+                             cuisine_style, staff_description, to_email, token=None):
     zip_path = None
     try:
         credentials_path = os.environ.get(
@@ -301,6 +259,9 @@ def _run_pipeline_and_email(job_id, pdf_path, job_dir, restaurant_name,
             for _, path in pdf_paths.items():
                 zf.write(path, arcname=Path(path).name)
 
+        if token:
+            mark_used(token)
+            logger.info(f"[{job_id}] Token consumed.")
         logger.info(f"[{job_id}] ZIP ready — emailing {to_email}...")
         _send_zip_email(to_email, restaurant_name, zip_path)
         logger.info(f"[{job_id}] Email sent.")
