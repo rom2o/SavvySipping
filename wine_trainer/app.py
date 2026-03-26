@@ -92,10 +92,13 @@ def stripe_webhook():
 
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
-        email = (
-            session.get("customer_email")
-            or (session.get("customer_details") or {}).get("email")
-        )
+        try:
+            email = session.customer_details.email
+        except AttributeError:
+            email = None
+        if not email:
+            email = getattr(session, "customer_email", None)
+
         if email:
             token     = create_token(email)
             upload_url = f"{BASE_URL}/upload/{token}"
