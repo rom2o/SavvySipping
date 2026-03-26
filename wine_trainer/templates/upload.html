@@ -8,14 +8,12 @@
 </head>
 <body>
 
-  <!-- ── Header ─────────────────────────────────────────────── -->
   <header>
     <div class="logo">🍷</div>
     <h1>Wine Training Generator</h1>
     <p class="tagline">Upload your wine list. Get a complete staff training pack in minutes.</p>
   </header>
 
-  <!-- ── Main Card ──────────────────────────────────────────── -->
   <main>
     <div class="card">
 
@@ -27,11 +25,15 @@
 
       <form
         id="uploadForm"
-        action="/process"
+        action="{{ '/process/' + token if token else '/process' }}"
         method="POST"
         enctype="multipart/form-data"
         onsubmit="showLoader()"
       >
+
+        {% if token %}
+        <input type="hidden" name="token" value="{{ token }}" />
+        {% endif %}
 
         <!-- Restaurant Name -->
         <div class="field">
@@ -77,7 +79,8 @@
           <span class="hint">Help Claude tailor the training tone and depth.</span>
         </div>
 
-        <!-- Email -->
+        <!-- Email (only shown when no token) -->
+        {% if not token %}
         <div class="field">
           <label for="email">Your Email <span class="required">*</span></label>
           <input
@@ -90,6 +93,7 @@
           />
           <span class="hint">We'll send the training pack here when it's ready (~3 min).</span>
         </div>
+        {% endif %}
 
         <!-- PDF Upload -->
         <div class="field">
@@ -122,7 +126,6 @@
           </div>
         </div>
 
-        <!-- Submit -->
         <button type="submit" class="btn-primary" id="submitBtn">
           Generate Training Pack
         </button>
@@ -130,7 +133,7 @@
       </form>
     </div>
 
-    <!-- ── Loader overlay ──────────────────────────────────── -->
+    <!-- Loader overlay -->
     <div id="loader" class="loader-overlay" style="display:none;">
       <div class="loader-box">
         <div class="spinner"></div>
@@ -141,19 +144,21 @@
           <span class="step" id="step2">② Analyse wines</span>
           <span class="step" id="step3">③ Build documents</span>
         </div>
-        <p class="loader-note">This usually takes 60–90 seconds.</p>
+        {% if token %}
+        <p class="loader-note">Your ZIP will download automatically when ready.</p>
+        {% else %}
+        <p class="loader-note">Submitting… you'll receive an email in ~3 minutes.</p>
+        {% endif %}
       </div>
     </div>
 
   </main>
 
-  <!-- ── Footer ─────────────────────────────────────────────── -->
   <footer>
     <p>Powered by Adobe PDF Services &amp; Claude AI&nbsp;&nbsp;·&nbsp;&nbsp;© 2024</p>
   </footer>
 
   <script>
-    // ── File drop zone ──────────────────────────────────────────────────
     function onFileSelected(input) {
       const label = document.getElementById("fileText");
       if (input.files && input.files[0]) {
@@ -164,7 +169,7 @@
 
     const drop = document.getElementById("fileDrop");
     drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("drag-over"); });
-    drop.addEventListener("dragleave", ()  => drop.classList.remove("drag-over"));
+    drop.addEventListener("dragleave", () => drop.classList.remove("drag-over"));
     drop.addEventListener("drop", e => {
       e.preventDefault();
       drop.classList.remove("drag-over");
@@ -173,15 +178,14 @@
       onFileSelected(input);
     });
 
-    // ── Loader + step animation ─────────────────────────────────────────
     function showLoader() {
       document.getElementById("loader").style.display = "flex";
       document.getElementById("submitBtn").disabled = true;
 
       const steps = [
-        { id: "step1", text: "Extracting wine list from PDF…",   delay: 0    },
-        { id: "step2", text: "Claude is analysing your wines…",   delay: 20000 },
-        { id: "step3", text: "Building your 4 documents…",        delay: 50000 },
+        { id: "step1", text: "Extracting wine list from PDF…", delay: 0 },
+        { id: "step2", text: "Claude is analysing your wines…", delay: 20000 },
+        { id: "step3", text: "Building your 4 documents…",     delay: 50000 },
       ];
 
       steps.forEach(s => {
