@@ -34,19 +34,33 @@ def extract_wine_list(pdf_path: str, credentials_path: str) -> str:
         Clean text string of the entire wine list.
     """
     # ── 1. Load credentials ───────────────────────────────────────────────
-    # Prefer environment variables (Railway / production); fall back to file.
+    # Priority: individual env vars → JSON env var → credentials file
     client_id     = os.environ.get("ADOBE_CLIENT_ID")
     client_secret = os.environ.get("ADOBE_CLIENT_SECRET")
 
     if not client_id or not client_secret:
-        creds = _load_credentials(credentials_path)
-        client_id     = creds.get("client_id") or creds.get("CLIENT_ID")
-        client_secret = creds.get("client_secret") or creds.get("CLIENT_SECRET")
+        raw_json = os.environ.get("ADOBE_CREDENTIALS_JSON")
+        if raw_json:
+            try:
+                creds = json.loads(raw_json)
+                client_id     = creds.get("client_id") or creds.get("CLIENT_ID")
+                client_secret = creds.get("client_secret") or creds.get("CLIENT_SECRET")
+            except json.JSONDecodeError as e:
+                raise ValueError(f"ADOBE_CREDENTIALS_JSON is not valid JSON: {e}")
+
+    if not client_id or not client_secret:
+        try:
+            creds = _load_credentials(credentials_path)
+            client_id     = creds.get("client_id") or creds.get("CLIENT_ID")
+            client_secret = creds.get("client_secret") or creds.get("CLIENT_SECRET")
+        except FileNotFoundError:
+            pass
 
     if not client_id or not client_secret:
         raise ValueError(
-            "Adobe credentials not found. Set ADOBE_CLIENT_ID and ADOBE_CLIENT_SECRET "
-            "environment variables, or provide a valid credentials JSON file."
+            "Adobe credentials not found. In Railway, set either:\n"
+            "  ADOBE_CLIENT_ID + ADOBE_CLIENT_SECRET  (two separate vars)\n"
+            "  ADOBE_CREDENTIALS_JSON  (full contents of pdfservices-api-credentials.json)"
         )
 
     # ── 2. Get OAuth access token ─────────────────────────────────────────
