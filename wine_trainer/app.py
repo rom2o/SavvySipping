@@ -309,6 +309,10 @@ def _send_token_email(to_email: str, upload_url: str) -> None:
               Upload Your Wine List
             </a>
           </p>
+          <p>If the button doesn't work, copy and paste this link into your browser:</p>
+          <p style="word-break:break-all;">
+            <a href="{upload_url}">{upload_url}</a>
+          </p>
           <p style="color:#888;font-size:12px;">
             This link is valid for 72 hours and can only be used once.
           </p>
