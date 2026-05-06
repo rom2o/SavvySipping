@@ -112,6 +112,8 @@ def validate_token(token: str) -> dict | None:
     Returns None otherwise.
     """
     if DATABASE_URL:
+        logger.info("validate_token called for token %s…", token[:8])
+
         conn = _conn()
         try:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -125,16 +127,66 @@ def validate_token(token: str) -> dict | None:
             conn.close()
 
         if row is None:
+            logger.warning(
+                "validate_token: no row found for token %s… — token does not exist in DB",
+                token[:8],
+            )
             return None
+
+        logger.info(
+            "validate_token: row found for token %s… — used=%r (type=%s), expires_at=%r (type=%s)",
+            token[:8],
+            row["used"],
+            type(row["used"]).__name__,
+            row["expires_at"],
+            type(row["expires_at"]).__name__,
+        )
+
         if row["used"]:
+            logger.warning(
+                "validate_token: returning None — token %s… is already marked used (used=%r)",
+                token[:8],
+                row["used"],
+            )
             return None
+
         expires_at = row["expires_at"]
+        now_utc = datetime.now(timezone.utc)
+        logger.info(
+            "validate_token: checking expiry — expires_at=%r (tzinfo=%r), now_utc=%r",
+            expires_at,
+            expires_at.tzinfo,
+            now_utc,
+        )
+
         if expires_at.tzinfo:
-            if datetime.now(timezone.utc) > expires_at:
+            if now_utc > expires_at:
+                logger.warning(
+                    "validate_token: returning None — token %s… is expired "
+                    "(expires_at=%r, now_utc=%r, delta=%s)",
+                    token[:8],
+                    expires_at,
+                    now_utc,
+                    now_utc - expires_at,
+                )
                 return None
         else:
-            if datetime.utcnow() > expires_at:
+            naive_now = datetime.utcnow()
+            if naive_now > expires_at:
+                logger.warning(
+                    "validate_token: returning None — token %s… is expired (naive comparison) "
+                    "(expires_at=%r, utcnow=%r, delta=%s)",
+                    token[:8],
+                    expires_at,
+                    naive_now,
+                    naive_now - expires_at,
+                )
                 return None
+
+        logger.info(
+            "validate_token: token %s… passed all checks — returning row",
+            token[:8],
+        )
         return dict(row)
     else:
         with _conn() as conn:
