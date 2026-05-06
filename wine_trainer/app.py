@@ -291,7 +291,7 @@ def _send_token_email(to_email: str, upload_url: str) -> None:
         return
 
     import sendgrid
-    from sendgrid.helpers.mail import Mail
+    from sendgrid.helpers.mail import Mail, TrackingSettings, ClickTrackingSetting
 
     message = Mail(
         from_email="noreply@savvysipping.com",
@@ -320,9 +320,12 @@ def _send_token_email(to_email: str, upload_url: str) -> None:
         </div>
         """,
     )
+    message.tracking_settings = TrackingSettings()
+    message.tracking_settings.click_tracking = ClickTrackingSetting(enable=False)
     sg = sendgrid.SendGridAPIClient(api_key=sg_key)
     sg.send(message)
     logger.info(f"Token email sent to {to_email}")
+
 
 
 def _send_zip_email(to_email: str, restaurant_name: str, zip_path: Path) -> None:
