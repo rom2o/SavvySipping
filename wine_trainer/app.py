@@ -291,7 +291,7 @@ def _send_token_email(to_email: str, upload_url: str) -> None:
         return
 
     import sendgrid
-    from sendgrid.helpers.mail import Mail
+    from sendgrid.helpers.mail import Mail, TrackingSettings, ClickTracking
 
     message = Mail(
         from_email="noreply@savvysipping.com",
@@ -320,6 +320,9 @@ def _send_token_email(to_email: str, upload_url: str) -> None:
         </div>
         """,
     )
+    tracking = TrackingSettings()
+    tracking.click_tracking = ClickTracking(enable=False, enable_text=False)
+    message.tracking_settings = tracking
     sg = sendgrid.SendGridAPIClient(api_key=sg_key)
     sg.send(message)
     logger.info(f"Token email sent to {to_email}")
