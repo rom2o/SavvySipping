@@ -24,6 +24,10 @@ if DATABASE_URL:
 
     # Railway uses postgres:// but psycopg2 requires postgresql://
     _DSN = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    if "?" not in _DSN:
+        _DSN += "?sslmode=require"
+    elif "sslmode=" not in _DSN:
+        _DSN += "&sslmode=require"
 
     def _conn():
         conn = psycopg2.connect(_DSN)
